@@ -15,7 +15,9 @@ use crate::core::{AppState, INSTRUCTIONS_END, INSTRUCTIONS_START, TRACK_ON};
 
 use super::{
     htc::{htc_to_unified, HtcFacialData},
-    unified::{UnifiedExpressions, UnifiedShapeAccessors, UnifiedTrackingData},
+    unified::{
+        UnifiedExpressions, UnifiedShapeAccessors, UnifiedTrackingData, MAX_EYE_DEFLECTION_RAD,
+    },
     FaceReceiver,
 };
 
@@ -23,6 +25,9 @@ static STA_GAZE: Lazy<Arc<str>> = Lazy::new(|| format!("{}", "GAZE".color(Color:
 static STA_GAZE_OFF: Lazy<Arc<str>> = Lazy::new(|| format!("{}", "GAZE".color(Color::Red)).into());
 static STA_FACE: Lazy<Arc<str>> = Lazy::new(|| format!("{}", "FACE".color(Color::Green)).into());
 static STA_FACE_OFF: Lazy<Arc<str>> = Lazy::new(|| format!("{}", "FACE".color(Color::Red)).into());
+
+// Keep the last gaze through short dropouts such as blinks.
+const GAZE_HOLD_TIME: Duration = Duration::from_millis(500);
 
 pub struct OpenXrReceiver {
     state: Option<XrState>,
@@ -100,6 +105,7 @@ pub(super) struct XrState {
     lip_tracker_htc: Option<xr::FacialTrackerHTC>,
 
     eyes_closed_frames: u32,
+    last_gaze: Instant,
 }
 
 impl XrState {
@@ -173,6 +179,7 @@ impl XrState {
             events: xr::EventDataBuffer::new(),
             session_running: false,
             eyes_closed_frames: 0,
+            last_gaze: Instant::now(),
         };
 
         if let Ok(fb_supported) = me
@@ -319,10 +326,13 @@ impl XrState {
 
             data.eyes[0] = Some(vec3(x, y, z));
             data.eyes[1] = data.eyes[0];
+            self.last_gaze = Instant::now();
             state.status.add_item(STA_GAZE.clone());
         } else {
             state.status.add_item(STA_GAZE_OFF.clone());
         }
+
+        let mut shapes_updated = false;
 
         if let Some(face_tracker) = self.face_tracker_fb.as_ref() {
             let expression = face_tracker.get_expression_weights(next_frame)?;
@@ -331,6 +341,7 @@ impl XrState {
                 if let Some(shapes) = super::face2_fb::face2_fb_to_unified(&expression.weights) {
                     data.shapes[..=UnifiedExpressions::COUNT]
                         .copy_from_slice(&shapes[..=UnifiedExpressions::COUNT]);
+                    shapes_updated = true;
                 }
                 state.status.add_item(STA_FACE.clone());
             } else {
@@ -357,10 +368,33 @@ impl XrState {
                 });
                 data.shapes[..=UnifiedExpressions::COUNT]
                     .copy_from_slice(&shapes[..=UnifiedExpressions::COUNT]);
+                shapes_updated = true;
                 state.status.add_item(STA_FACE.clone());
             } else {
                 state.status.add_item(STA_FACE_OFF.clone());
             }
+        }
+
+        // Gaze lost: fall back to the blendshapes, in the same units as real gaze.
+        if data.eyes[0].is_some() && self.last_gaze.elapsed() > GAZE_HOLD_TIME {
+            data.eyes = if shapes_updated {
+                let pitch = data.shapes.getu(UnifiedExpressions::EyeY) * MAX_EYE_DEFLECTION_RAD;
+                let yaw = |x: f32| -x * MAX_EYE_DEFLECTION_RAD;
+                [
+                    Some(vec3(
+                        pitch,
+                        yaw(data.shapes.getu(UnifiedExpressions::EyeLeftX)),
+                        0.0,
+                    )),
+                    Some(vec3(
+                        pitch,
+                        yaw(data.shapes.getu(UnifiedExpressions::EyeRightX)),
+                        0.0,
+                    )),
+                ]
+            } else {
+                [None, None]
+            };
         }
 
         Ok(())

@@ -20,6 +20,8 @@ pub struct UnifiedEyeData {
 
 pub type UnifiedShapes = [f32; NUM_ALL_SHAPES];
 
+pub(super) const MAX_EYE_DEFLECTION_RAD: f32 = PI / 6.0; // 30deg
+
 pub trait UnifiedShapeAccessors {
     fn getu(&self, exp: UnifiedExpressions) -> f32;
     fn getc(&self, exp: CombinedExpression) -> f32;
@@ -480,8 +482,6 @@ impl UnifiedTrackingData {
     }
 
     fn update_eye_look_shapes(&mut self) {
-        const MAX_EYE_DEFLECTION_RAD: f32 = PI / 6.0; // 30deg
-
         let (lx, ly, rx, ry) = if let Some(left) = self.eyes[0] {
             let right = self.eyes[1].unwrap_or(left);
             let n = |rad: f32| rad / MAX_EYE_DEFLECTION_RAD;
