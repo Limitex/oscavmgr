@@ -52,9 +52,9 @@ impl FaceReceiver for BabbleEtvrReceiver {
         let listen_port = self.listen_port;
 
         let babble_recv_port = listen_port + 10;
-        let babble_http_port = babble_recv_port + 1;
+        // let babble_http_port = babble_recv_port + 1;
         let etvr_recv_port = babble_recv_port + 10;
-        let etvr_http_port = etvr_recv_port + 1;
+        // let etvr_http_port = etvr_recv_port + 1;
 
         log::info!("{}", *INSTRUCTIONS_START);
         log::info!("");
