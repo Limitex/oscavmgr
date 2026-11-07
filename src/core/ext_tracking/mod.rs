@@ -127,7 +127,9 @@ impl ExtTracking {
             #[cfg(feature = "alvr")]
             FaceSetup::Alvr => Box::new(AlvrReceiver::new()),
             #[cfg(feature = "openxr")]
-            FaceSetup::Openxr => Box::new(OpenXrReceiver::new()),
+            FaceSetup::Openxr { alt_tongue_layout } => {
+                Box::new(OpenXrReceiver::new(alt_tongue_layout))
+            }
             #[cfg(feature = "babble")]
             FaceSetup::Babble { listen } => Box::new(BabbleEtvrReceiver::new(listen)),
         };

@@ -82,7 +82,10 @@ enum Face2Fb {
     Max,
 }
 
-pub(crate) fn face2_fb_to_unified(face_fb: &[f32]) -> Option<UnifiedShapes> {
+pub(crate) fn face2_fb_to_unified(
+    face_fb: &[f32],
+    alt_tongue_layout: bool,
+) -> Option<UnifiedShapes> {
     let mut shapes: UnifiedShapes = [0.0; NUM_ALL_SHAPES];
     if face_fb.len() < FaceFb::Max as usize {
         log::warn!(
@@ -346,11 +349,36 @@ pub(crate) fn face2_fb_to_unified(face_fb: &[f32]) -> Option<UnifiedShapes> {
     );
 
     if face_fb.len() >= Face2Fb::Max as usize {
-        shapes.setu(UnifiedExpressions::TongueOut, getf2(Face2Fb::TongueOut));
-        shapes.setu(
-            UnifiedExpressions::TongueCurlUp,
-            getf2(Face2Fb::TongueTipAlveolar),
-        );
+        if alt_tongue_layout {
+            // Observed on Quest Pro over WiVRn: Tongue_Out stays at 0 and the
+            // tongue is reported through the slots before it.
+            shapes.setu(
+                UnifiedExpressions::TongueOut,
+                getf2(Face2Fb::TongueTipInterdental),
+            );
+            shapes.setu(
+                UnifiedExpressions::TongueLeft,
+                getf2(Face2Fb::TongueTipAlveolar),
+            );
+            shapes.setu(
+                UnifiedExpressions::TongueRight,
+                getf2(Face2Fb::TongueFrontDorsalPalate),
+            );
+            shapes.setu(
+                UnifiedExpressions::TongueUp,
+                getf2(Face2Fb::TongueMidDorsalPalate),
+            );
+            shapes.setu(
+                UnifiedExpressions::TongueDown,
+                getf2(Face2Fb::TongueBackDorsalPalate),
+            );
+        } else {
+            shapes.setu(UnifiedExpressions::TongueOut, getf2(Face2Fb::TongueOut));
+            shapes.setu(
+                UnifiedExpressions::TongueCurlUp,
+                getf2(Face2Fb::TongueTipAlveolar),
+            );
+        }
     }
 
     Some(shapes)

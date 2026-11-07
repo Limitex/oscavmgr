@@ -33,7 +33,11 @@ pub enum FaceSetup {
     Dummy,
     #[cfg(feature = "openxr")]
     /// Retrieve face data from OpenXR (WiVRn / Monado)
-    Openxr,
+    Openxr {
+        /// Read the tongue from the slots before Tongue_Out (seen on Quest Pro over WiVRn)
+        #[arg(long, default_value_t = false)]
+        alt_tongue_layout: bool,
+    },
 
     #[cfg(feature = "alvr")]
     /// Retrieve face data from ALVR

@@ -215,7 +215,7 @@ fn receive_until_err(
                                     &mut data,
                                 );
                                 if let Some(face_fb) = tracking.fb_face_expression {
-                                    data.shapes = face2_fb_to_unified(&face_fb);
+                                    data.shapes = face2_fb_to_unified(&face_fb, false);
                                 }
                                 if let Err(e) = sender.try_send(Box::new(data)) {
                                     log::debug!("Failed to send tracking message: {}", e);
