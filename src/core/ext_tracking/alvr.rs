@@ -25,7 +25,7 @@ use crate::core::{
 };
 
 use super::{
-    unified::{UnifiedExpressions, UnifiedTrackingData, NUM_ALL_SHAPES},
+    unified::{UnifiedExpressions, UnifiedTrackingData, GAZE_HOLD_TIME, NUM_ALL_SHAPES},
     FaceReceiver,
 };
 
@@ -46,6 +46,7 @@ pub(super) struct AlvrReceiver {
     sender: SyncSender<Box<AlvrTrackingData>>,
     receiver: Receiver<Box<AlvrTrackingData>>,
     last_received: Instant,
+    last_gaze: Instant,
 }
 
 impl AlvrReceiver {
@@ -55,6 +56,7 @@ impl AlvrReceiver {
             sender,
             receiver,
             last_received: Instant::now(),
+            last_gaze: Instant::now(),
         }
     }
 }
@@ -101,9 +103,11 @@ impl FaceReceiver for AlvrReceiver {
         for new_data in self.receiver.try_iter() {
             if let Some(new_left) = new_data.eye[0] {
                 data.eyes[0] = Some(new_left);
+                self.last_gaze = Instant::now();
             }
             if let Some(new_right) = new_data.eye[1] {
                 data.eyes[1] = Some(new_right);
+                self.last_gaze = Instant::now();
             }
             if let Some(new_shapes) = new_data.shapes {
                 data.shapes[..=UnifiedExpressions::COUNT]
@@ -123,6 +127,10 @@ impl FaceReceiver for AlvrReceiver {
             if let Some(right_hand) = new_data.hands[1] {
                 state.tracking.right_hand = to_affine3a(right_hand);
             }
+        }
+
+        if self.last_gaze.elapsed() > GAZE_HOLD_TIME {
+            data.eyes = [None, None];
         }
 
         if self.last_received.elapsed() < Duration::from_secs(1) {
