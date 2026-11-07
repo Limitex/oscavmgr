@@ -35,6 +35,9 @@ Or grab the portable binary from releases!
 # If using WiVRn
 oscavmgr openxr
 
+# If using WiVRn, and the tongue doesn't move (seen on Quest Pro)
+oscavmgr openxr --alt-tongue-layout
+
 ## If using ALVR
 oscavmgr alvr
 

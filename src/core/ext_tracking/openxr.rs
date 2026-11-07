@@ -32,18 +32,22 @@ const GAZE_HOLD_TIME: Duration = Duration::from_millis(500);
 pub struct OpenXrReceiver {
     state: Option<XrState>,
     last_attempt: Instant,
+    alt_tongue_layout: bool,
 }
 
 impl OpenXrReceiver {
-    pub fn new() -> Self {
+    pub fn new(alt_tongue_layout: bool) -> Self {
         Self {
             state: None,
             last_attempt: Instant::now(),
+            alt_tongue_layout,
         }
     }
 
     fn try_init(&mut self) {
-        self.state = XrState::new().map_err(|e| log::error!("XR: {}", e)).ok();
+        self.state = XrState::new(self.alt_tongue_layout)
+            .map_err(|e| log::error!("XR: {}", e))
+            .ok();
         self.last_attempt = Instant::now();
     }
 }
@@ -106,10 +110,11 @@ pub(super) struct XrState {
 
     eyes_closed_frames: u32,
     last_gaze: Instant,
+    alt_tongue_layout: bool,
 }
 
 impl XrState {
-    fn new() -> anyhow::Result<Self> {
+    fn new(alt_tongue_layout: bool) -> anyhow::Result<Self> {
         let (instance, system) = xr_init()?;
 
         let actions = instance.create_action_set("oscavmgr", "OscAvMgr", 0)?;
@@ -180,6 +185,7 @@ impl XrState {
             session_running: false,
             eyes_closed_frames: 0,
             last_gaze: Instant::now(),
+            alt_tongue_layout,
         };
 
         if let Ok(fb_supported) = me
@@ -338,7 +344,10 @@ impl XrState {
             let expression = face_tracker.get_expression_weights(next_frame)?;
 
             if let Some(expression) = expression {
-                if let Some(shapes) = super::face2_fb::face2_fb_to_unified(&expression.weights) {
+                if let Some(shapes) = super::face2_fb::face2_fb_to_unified(
+                    &expression.weights,
+                    self.alt_tongue_layout,
+                ) {
                     data.shapes[..=UnifiedExpressions::COUNT]
                         .copy_from_slice(&shapes[..=UnifiedExpressions::COUNT]);
                     shapes_updated = true;
