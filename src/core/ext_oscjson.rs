@@ -43,7 +43,6 @@ impl ExtOscJson {
         if self.next_run > std::time::Instant::now() {
             return notify_avatar;
         }
-        self.next_run = std::time::Instant::now() + std::time::Duration::from_secs(15);
 
         for event in self.mdns_recv.try_iter() {
             if let ServiceEvent::ServiceResolved(info) = event {
@@ -67,9 +66,10 @@ impl ExtOscJson {
             }
         }
 
-        if self.oscjson_addr.is_some() && notify_avatar {
-            self.avatar(&AvatarIdentifier::Default);
-        }
+        // mDNS results take a moment to arrive, so poll quickly until VRChat is found.
+        let interval = if self.oscjson_addr.is_some() { 15 } else { 1 };
+        self.next_run = std::time::Instant::now() + Duration::from_secs(interval);
+
         notify_avatar
     }
 
