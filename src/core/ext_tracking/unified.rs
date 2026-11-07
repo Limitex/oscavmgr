@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, time::Duration};
 
 use glam::{Quat, Vec3};
 use rosc::{OscBundle, OscType};
@@ -21,6 +21,9 @@ pub struct UnifiedEyeData {
 pub type UnifiedShapes = [f32; NUM_ALL_SHAPES];
 
 pub(super) const MAX_EYE_DEFLECTION_RAD: f32 = PI / 6.0; // 30deg
+
+// Keep the last gaze through short dropouts such as blinks.
+pub(super) const GAZE_HOLD_TIME: Duration = Duration::from_millis(500);
 
 pub trait UnifiedShapeAccessors {
     fn getu(&self, exp: UnifiedExpressions) -> f32;
