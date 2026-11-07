@@ -94,6 +94,8 @@ impl UnifiedTrackingData {
     }
 
     pub fn calc_combined(&mut self, state: &mut AppState) {
+        self.update_eye_gaze_params();
+
         let left_eye_openness =
             (1. - self.getu(UnifiedExpressions::EyeClosedLeft) * 1.5).clamp(0., 1.);
         self.setc(
@@ -460,6 +462,23 @@ impl UnifiedTrackingData {
         dirty
     }
 
+    fn update_eye_gaze_params(&mut self) {
+        if let Some(left) = self.eyes[0] {
+            let right = self.eyes[1].unwrap_or(left);
+
+            // Same convention as Virtual Desktop's VRCFT module: radians, +X is right, +Y is up.
+            self.setu(UnifiedExpressions::EyeLeftX, -left.y);
+            self.setu(UnifiedExpressions::EyeRightX, -right.y);
+            self.setu(UnifiedExpressions::EyeLeftY, left.x);
+            self.setu(UnifiedExpressions::EyeRightY, right.x);
+            self.setu(UnifiedExpressions::EyeY, (left.x + right.x) * 0.5);
+        } else {
+            let y = self.getu(UnifiedExpressions::EyeY);
+            self.setu(UnifiedExpressions::EyeLeftY, y);
+            self.setu(UnifiedExpressions::EyeRightY, y);
+        }
+    }
+
     fn update_eye_look_shapes(&mut self) {
         const MAX_EYE_DEFLECTION_RAD: f32 = PI / 6.0; // 30deg
 
@@ -550,7 +569,7 @@ impl UnifiedTrackingData {
 }
 
 pub const NUM_ALL_SHAPES: usize = UnifiedExpressions::COUNT + CombinedExpression::COUNT;
-pub const NUM_VRC_SHAPES: usize = UnifiedExpressions::COUNT - 3;
+pub const NUM_VRC_SHAPES: usize = UnifiedExpressions::COUNT - 5;
 const _: () = assert!(NUM_VRC_SHAPES == 102); // prevent drift from spec
 
 #[allow(unused)]
@@ -664,6 +683,8 @@ pub enum UnifiedExpressions {
     EyeLeftX,
     EyeRightX,
     EyeY,
+    EyeLeftY,
+    EyeRightY,
 }
 
 #[allow(unused)]
