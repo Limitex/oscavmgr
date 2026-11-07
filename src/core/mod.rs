@@ -62,6 +62,7 @@ pub struct AvatarOsc {
     _oscquery: Option<oscquery::OscQueryAdvert>,
     multi: MultiProgress,
     avatar_file: Option<Rc<str>>,
+    keep_avatar: bool,
 }
 
 pub struct OscTrack {
@@ -109,6 +110,7 @@ impl AvatarOsc {
             _oscquery: oscquery,
             multi,
             avatar_file: args.avatar.take().map(Rc::from),
+            keep_avatar: false,
         }
     }
 
@@ -234,6 +236,13 @@ impl AvatarOsc {
         info!("Avatar changed: {avatar}");
         let osc_root_node = self.ext_oscjson.avatar(&avatar);
 
+        // A file or native FT selection must survive OSCJSON discovery.
+        self.keep_avatar = match avatar {
+            AvatarIdentifier::Path(_) => osc_root_node.is_some(),
+            AvatarIdentifier::Osc { full_ft, .. } => full_ft,
+            AvatarIdentifier::Default => false,
+        };
+
         if matches!(avatar, AvatarIdentifier::Osc { full_ft: true, .. }) {
             self.ext_tracking.vrc_face_v1_params();
         } else {
@@ -296,7 +305,7 @@ impl AvatarOsc {
             },
         );
 
-        if self.ext_oscjson.step() {
+        if self.ext_oscjson.step() && !self.keep_avatar {
             self.avatar(AvatarIdentifier::Default, state);
         } else if let Some(path) = self.avatar_file.take() {
             self.avatar(AvatarIdentifier::Path(path.clone()), state);

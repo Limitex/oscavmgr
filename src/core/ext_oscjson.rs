@@ -10,16 +10,21 @@ use std::{
     rc::Rc,
     sync::Arc,
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use super::{bundle::AvatarBundle, folders::CONFIG_DIR};
+
+const MAX_FETCH_RETRIES: u32 = 10;
+const FETCH_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 
 pub struct ExtOscJson {
     mdns: ServiceDaemon,
     mdns_recv: mdns_sd::Receiver<ServiceEvent>,
     oscjson_addr: Option<Arc<str>>,
-    next_run: std::time::Instant,
+    oscjson_name: Option<Arc<str>>,
+    fetch_retry_at: Option<Instant>,
+    fetch_retries_left: u32,
     client: reqwest::blocking::Client,
 }
 
@@ -33,47 +38,82 @@ impl ExtOscJson {
             mdns,
             mdns_recv,
             oscjson_addr: None,
-            next_run: std::time::Instant::now(),
+            oscjson_name: None,
+            fetch_retry_at: None,
+            fetch_retries_left: 0,
             client,
         }
     }
 
     pub fn step(&mut self) -> bool {
         let mut notify_avatar = false;
-        if self.next_run > std::time::Instant::now() {
-            return notify_avatar;
-        }
 
         for event in self.mdns_recv.try_iter() {
-            if let ServiceEvent::ServiceResolved(info) = event {
-                if !info.get_fullname().starts_with("VRChat-Client-") {
-                    continue;
-                }
-                let addr = info.get_addresses().iter().next().unwrap();
-                info!(
-                    "Found OSCJSON service: {} @ {}:{}",
-                    info.get_fullname(),
-                    addr,
-                    info.get_port()
-                );
+            match event {
+                ServiceEvent::ServiceResolved(info) => {
+                    if !info.get_fullname().starts_with("VRChat-Client-") {
+                        continue;
+                    }
+                    let Some(addr) = info.get_addresses_v4().into_iter().min() else {
+                        warn!(
+                            "OSCJSON service has no IPv4 address: {}",
+                            info.get_fullname()
+                        );
+                        continue;
+                    };
+                    let url = format!("http://{}:{}/avatar", addr, info.get_port());
 
-                if self.oscjson_addr.is_none() {
-                    notify_avatar = true;
+                    if self.oscjson_addr.as_deref() != Some(url.as_str()) {
+                        info!(
+                            "Found OSCJSON service: {} @ {}:{}",
+                            info.get_fullname(),
+                            addr,
+                            info.get_port()
+                        );
+                        self.oscjson_addr = Some(url.into());
+                        self.oscjson_name = Some(info.get_fullname().into());
+                        self.fetch_retries_left = MAX_FETCH_RETRIES;
+                        self.fetch_retry_at = None;
+                        notify_avatar = true;
+                    }
                 }
-
-                self.oscjson_addr =
-                    Some(format!("http://{}:{}/avatar", addr, info.get_port()).into());
+                ServiceEvent::ServiceRemoved(_, fullname) => {
+                    if self.oscjson_name.as_deref() == Some(fullname.as_str()) {
+                        info!("Lost OSCJSON service: {}", fullname);
+                        self.oscjson_addr = None;
+                        self.oscjson_name = None;
+                        self.fetch_retry_at = None;
+                    }
+                }
+                _ => {}
             }
         }
 
-        // mDNS results take a moment to arrive, so poll quickly until VRChat is found.
-        let interval = if self.oscjson_addr.is_some() { 15 } else { 1 };
-        self.next_run = std::time::Instant::now() + Duration::from_secs(interval);
+        if self.fetch_retry_at.is_some_and(|at| at <= Instant::now()) {
+            self.fetch_retry_at = None;
+            notify_avatar = true;
+        }
 
         notify_avatar
     }
 
     pub fn avatar(&mut self, avatar: &AvatarIdentifier) -> Option<OscJsonNode> {
+        let node = self.fetch_avatar(avatar);
+
+        // VRChat may advertise before its avatar tree is ready.
+        self.fetch_retry_at = None;
+        if matches!(avatar, AvatarIdentifier::Default)
+            && !node.as_ref().is_some_and(|n| n.get("parameters").is_some())
+            && self.fetch_retries_left > 0
+        {
+            self.fetch_retries_left -= 1;
+            self.fetch_retry_at = Some(Instant::now() + FETCH_RETRY_INTERVAL);
+        }
+
+        node
+    }
+
+    fn fetch_avatar(&mut self, avatar: &AvatarIdentifier) -> Option<OscJsonNode> {
         let mut json = String::new();
 
         if let AvatarIdentifier::Path(path) = avatar {
