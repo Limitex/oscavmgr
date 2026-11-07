@@ -34,10 +34,14 @@ pub struct ExtGogo {
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
     avatar_changed: Option<Instant>,
+
+    #[serde(skip_serializing)]
+    #[serde(skip_deserializing)]
+    auto_loco: bool,
 }
 
 impl ExtGogo {
-    pub fn new() -> ExtGogo {
+    pub fn new(auto_loco: bool) -> ExtGogo {
         let path = format!("{}/{}", CONFIG_DIR.as_ref(), FILE_NAME);
 
         let mut me = File::open(&path)
@@ -47,6 +51,7 @@ impl ExtGogo {
             .unwrap();
 
         me.path = path;
+        me.auto_loco = auto_loco;
 
         me
     }
@@ -100,7 +105,8 @@ impl ExtGogo {
     }
 
     pub fn step(&mut self, parameters: &AvatarParameters, bundle: &mut OscBundle) {
-        if let Some(OscType::Int(tracking)) = parameters.get(TRACKING_TYPE) {
+        let tracking = parameters.get(TRACKING_TYPE).filter(|_| self.auto_loco);
+        if let Some(OscType::Int(tracking)) = tracking {
             let want_loco = if 5 < *tracking {
                 OscType::Bool(true)
             } else {

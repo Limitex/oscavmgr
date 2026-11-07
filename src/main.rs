@@ -75,4 +75,8 @@ pub struct Args {
     /// The OSC-JSON avatar file to use. See ~/.config/oscavmgr-avatar.json
     #[arg(long)]
     avatar: Option<Box<str>>,
+
+    /// Don't force GoGo Loco's Go/Locomotion based on the tracking type
+    #[arg(long, default_value_t = false)]
+    no_gogo_auto_loco: bool,
 }
